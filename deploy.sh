@@ -196,21 +196,20 @@ header "Step 3/8 — Preparing OpenClaw Docker image"
 case "$OPENCLAW_CHOICE" in
   1)
     log "Pulling image: $OPENCLAW_PULL_IMAGE"
-    # Use newgrp to pick up docker group if just added
-    sg docker -c "docker pull $OPENCLAW_PULL_IMAGE"
-    sg docker -c "docker tag $OPENCLAW_PULL_IMAGE $OPENCLAW_IMAGE_NAME"
+    sudo docker pull "$OPENCLAW_PULL_IMAGE"
+    sudo docker tag "$OPENCLAW_PULL_IMAGE" "$OPENCLAW_IMAGE_NAME"
     log "Tagged as $OPENCLAW_IMAGE_NAME"
     ;;
   2)
     log "Building OpenClaw from $OPENCLAW_BUILD_REPO"
     TMPDIR=$(mktemp -d)
     git clone "$OPENCLAW_BUILD_REPO" "$TMPDIR/openclaw"
-    sg docker -c "docker build -t $OPENCLAW_IMAGE_NAME $TMPDIR/openclaw"
+    sudo docker build -t "$OPENCLAW_IMAGE_NAME" "$TMPDIR/openclaw"
     rm -rf "$TMPDIR"
     log "Built and tagged as $OPENCLAW_IMAGE_NAME"
     ;;
   3)
-    if sg docker -c "docker image inspect $OPENCLAW_IMAGE_NAME" &>/dev/null; then
+    if sudo docker image inspect "$OPENCLAW_IMAGE_NAME" &>/dev/null; then
       log "Image $OPENCLAW_IMAGE_NAME found locally."
     else
       warn "Image $OPENCLAW_IMAGE_NAME NOT found. You must build or pull it before deploying claws."
