@@ -70,6 +70,27 @@ export const save = mutation({
       )
       .first();
 
+    // Save current version before overwriting
+    if (existing && existing.content !== args.content) {
+      const latestVersion = await ctx.db
+        .query("configVersions")
+        .withIndex("by_claw_and_type", (q) =>
+          q.eq("clawId", args.clawId).eq("fileType", args.fileType),
+        )
+        .order("desc")
+        .first();
+
+      const nextVersion = (latestVersion?.version ?? 0) + 1;
+
+      await ctx.db.insert("configVersions", {
+        clawId: args.clawId,
+        fileType: args.fileType,
+        content: existing.content,
+        version: nextVersion,
+        createdAt: Date.now(),
+      });
+    }
+
     if (existing) {
       await ctx.db.patch(existing._id, {
         content: args.content,

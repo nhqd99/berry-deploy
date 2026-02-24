@@ -12,7 +12,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ClawStatusBadge } from "@/components/claw-status-badge";
-import { Separator } from "@/components/ui/separator";
+import { ClawDetailSkeleton } from "@/components/claw-detail-skeleton";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { CloneDialog } from "@/components/clone-dialog";
+import { ResourceMonitor } from "@/components/resource-monitor";
 import Link from "next/link";
 import {
   Play,
@@ -27,14 +31,17 @@ import {
   Container,
   Clock,
   Loader2,
-  ArrowLeft,
   MessageCircle,
   Check,
   RefreshCw,
+  Activity,
+  TerminalSquare,
+  ChevronRight,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { formatUptime } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function ClawDetailPage() {
   const params = useParams();
@@ -52,11 +59,7 @@ export default function ClawDetailPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   if (claw === undefined) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <ClawDetailSkeleton />;
   }
 
   if (claw === null) {
@@ -64,7 +67,7 @@ export default function ClawDetailPage() {
       <div className="text-center py-20">
         <p className="text-muted-foreground">Claw not found</p>
         <Link href="/dashboard">
-          <Button variant="link">Back to dashboard</Button>
+          <Button variant="link" className="text-indigo-400 mt-2">Back to dashboard</Button>
         </Link>
       </div>
     );
@@ -77,23 +80,26 @@ export default function ClawDetailPage() {
     setActionLoading(actionName);
     try {
       await fn({ clawId });
+      toast.success(`${actionName.charAt(0).toUpperCase() + actionName.slice(1)} successful`);
     } catch (err) {
-      console.error(`${actionName} failed:`, err);
+      toast.error(`${actionName} failed`, {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
     } finally {
       setActionLoading(null);
     }
   }
 
   async function handleRemove() {
-    if (!confirm("Are you sure you want to remove this Claw? This action cannot be undone.")) {
-      return;
-    }
     setActionLoading("remove");
     try {
       await removeClaw({ clawId });
+      toast.success("Claw removed");
       router.push("/dashboard");
     } catch (err) {
-      console.error("Remove failed:", err);
+      toast.error("Remove failed", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
       setActionLoading(null);
     }
   }
@@ -103,30 +109,40 @@ export default function ClawDetailPage() {
       ? formatUptime(Date.now() - claw.lastStartedAt)
       : null;
 
+  const managementLinks = [
+    { href: `/dashboard/claw/${clawId}/config`, icon: FileText, label: "Configuration", desc: "soul.md, memory.md" },
+    { href: `/dashboard/claw/${clawId}/logs`, icon: ScrollText, label: "Activity Logs", desc: "Live & historical" },
+    { href: `/dashboard/claw/${clawId}/skills`, icon: Puzzle, label: "Skills", desc: "Manage extensions" },
+    { href: `/dashboard/claw/${clawId}/monitoring`, icon: Activity, label: "Monitoring", desc: "CPU, memory, I/O" },
+    { href: `/dashboard/claw/${clawId}/terminal`, icon: TerminalSquare, label: "Terminal", desc: "Interactive shell" },
+    { href: `/dashboard/claw/${clawId}/domain`, icon: Globe, label: "Custom Domain", desc: claw.customDomain || "Not configured" },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">{claw.name}</h1>
-            <ClawStatusBadge status={claw.status} />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {claw.containerName}
-          </p>
+    <div className="space-y-8">
+      <PageBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: claw.name },
+        ]}
+      />
+
+      <div>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-gradient">{claw.name}</h1>
+          <ClawStatusBadge status={claw.status} />
         </div>
+        <p className="text-xs text-muted-foreground/60 mt-1 font-mono">
+          {claw.containerName}
+        </p>
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
           size="sm"
+          className="border-white/[0.10] hover:bg-white/[0.06] rounded-xl transition-all duration-300"
           disabled={claw.status !== "stopped" || actionLoading !== null}
           onClick={() => handleAction("start", startClaw)}
         >
@@ -140,6 +156,7 @@ export default function ClawDetailPage() {
         <Button
           variant="outline"
           size="sm"
+          className="border-white/[0.10] hover:bg-white/[0.06] rounded-xl transition-all duration-300"
           disabled={claw.status !== "running" || actionLoading !== null}
           onClick={() => handleAction("stop", stopClaw)}
         >
@@ -153,6 +170,7 @@ export default function ClawDetailPage() {
         <Button
           variant="outline"
           size="sm"
+          className="border-white/[0.10] hover:bg-white/[0.06] rounded-xl transition-all duration-300"
           disabled={claw.status !== "running" || actionLoading !== null}
           onClick={() => handleAction("restart", restartClaw)}
         >
@@ -163,54 +181,74 @@ export default function ClawDetailPage() {
           )}
           Restart
         </Button>
-        <Button
+        <ConfirmDialog
+          trigger={
+            <Button
+              variant="destructive"
+              size="sm"
+              className="rounded-xl"
+              disabled={actionLoading !== null}
+            >
+              {actionLoading === "remove" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              Remove
+            </Button>
+          }
+          title="Remove this Claw?"
+          description="This will stop the container and permanently delete all data. This action cannot be undone."
+          confirmLabel="Remove"
           variant="destructive"
-          size="sm"
-          disabled={actionLoading !== null}
-          onClick={handleRemove}
-        >
-          {actionLoading === "remove" ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="mr-2 h-4 w-4" />
-          )}
-          Remove
-        </Button>
+          onConfirm={handleRemove}
+        />
+        <CloneDialog clawId={clawId} clawName={claw.name} />
       </div>
+
+      {/* Resource Monitor (compact) */}
+      {claw.status === "running" && (
+        <ResourceMonitor clawId={clawId} compact />
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* Status Card */}
-        <Card>
+        <Card className="glass">
           <CardHeader>
-            <CardTitle className="text-base">Instance Info</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Instance Info</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Gateway:</span>
-              <span className="font-mono">:{claw.gatewayPort}</span>
+            <div className="flex items-center gap-2.5">
+              <Globe className="h-4 w-4 text-indigo-400/60" />
+              <span className="text-muted-foreground/80">Gateway</span>
+              <span className="ml-auto font-mono text-xs">:{claw.gatewayPort}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Radio className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Bridge:</span>
-              <span className="font-mono">:{claw.bridgePort}</span>
+            <div className="divider-gradient" />
+            <div className="flex items-center gap-2.5">
+              <Radio className="h-4 w-4 text-indigo-400/60" />
+              <span className="text-muted-foreground/80">Bridge</span>
+              <span className="ml-auto font-mono text-xs">:{claw.bridgePort}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Container className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Container:</span>
-              <span className="font-mono text-xs">
+            <div className="divider-gradient" />
+            <div className="flex items-center gap-2.5">
+              <Container className="h-4 w-4 text-muted-foreground/50" />
+              <span className="text-muted-foreground/80">Container</span>
+              <span className="ml-auto font-mono text-xs text-muted-foreground/60">
                 {claw.containerId?.slice(0, 12) ?? "N/A"}
               </span>
             </div>
             {uptime && (
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Uptime:</span>
-                <span>{uptime}</span>
-              </div>
+              <>
+                <div className="divider-gradient" />
+                <div className="flex items-center gap-2.5">
+                  <Clock className="h-4 w-4 text-muted-foreground/50" />
+                  <span className="text-muted-foreground/80">Uptime</span>
+                  <span className="ml-auto text-xs">{uptime}</span>
+                </div>
+              </>
             )}
             {claw.errorMessage && (
-              <div className="rounded-md bg-destructive/10 p-2 text-destructive text-xs">
+              <div className="mt-2 rounded-xl bg-red-500/8 border border-red-500/15 p-3 text-red-300 text-xs">
                 {claw.errorMessage}
               </div>
             )}
@@ -218,29 +256,23 @@ export default function ClawDetailPage() {
         </Card>
 
         {/* Quick Links Card */}
-        <Card>
+        <Card className="glass">
           <CardHeader>
-            <CardTitle className="text-base">Management</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Management</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <Link href={`/dashboard/claw/${clawId}/config`}>
-              <Button variant="outline" className="w-full justify-start">
-                <FileText className="mr-2 h-4 w-4" />
-                Configuration (soul.md, memory.md)
-              </Button>
-            </Link>
-            <Link href={`/dashboard/claw/${clawId}/logs`}>
-              <Button variant="outline" className="w-full justify-start">
-                <ScrollText className="mr-2 h-4 w-4" />
-                Activity Logs
-              </Button>
-            </Link>
-            <Link href={`/dashboard/claw/${clawId}/skills`}>
-              <Button variant="outline" className="w-full justify-start">
-                <Puzzle className="mr-2 h-4 w-4" />
-                Skills
-              </Button>
-            </Link>
+          <CardContent className="space-y-1.5">
+            {managementLinks.map((link) => (
+              <Link key={link.href} href={link.href}>
+                <div className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-300 hover:bg-white/[0.06]">
+                  <link.icon className="h-4 w-4 text-indigo-400/60 group-hover:text-indigo-400 transition-colors duration-300" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium group-hover:text-indigo-300 transition-colors duration-300">{link.label}</p>
+                    <p className="text-xs text-muted-foreground/50 truncate">{link.desc}</p>
+                  </div>
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors duration-300" />
+                </div>
+              </Link>
+            ))}
           </CardContent>
         </Card>
       </div>
@@ -251,30 +283,31 @@ export default function ClawDetailPage() {
       )}
 
       {/* Recent Activity */}
-      <Card>
+      <Card className="glass">
         <CardHeader>
-          <CardTitle className="text-base">Recent Activity</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
           {logs && logs.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {logs.map((log) => (
                 <div
                   key={log._id}
-                  className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0"
+                  className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between pb-2.5 last:pb-0"
+                  style={{ borderBottom: "1px solid oklch(1 0 0 / 6%)" }}
                 >
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-center gap-2.5 text-sm">
                     <LogTypeBadge type={log.type} />
-                    <span>{log.message}</span>
+                    <span className="text-foreground/90">{log.message}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-[11px] text-muted-foreground/50 tabular-nums sm:ml-auto">
                     {new Date(log.createdAt).toLocaleString()}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No activity yet</p>
+            <p className="text-sm text-muted-foreground/50">No activity yet</p>
           )}
         </CardContent>
       </Card>
@@ -290,16 +323,14 @@ function TelegramPairingCard({ clawId }: { clawId: Id<"claws"> }) {
   const [loading, setLoading] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [approveLoading, setApproveLoading] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
-    setMessage(null);
     try {
       const result = await listPairing({ clawId });
       setRequests(result);
     } catch {
-      setMessage({ type: "error", text: "Failed to load pairing requests" });
+      toast.error("Failed to load pairing requests");
     } finally {
       setLoading(false);
     }
@@ -307,56 +338,58 @@ function TelegramPairingCard({ clawId }: { clawId: Id<"claws"> }) {
 
   async function handleApprove(code: string) {
     setApproveLoading(code);
-    setMessage(null);
     try {
       const result = await approvePairing({ clawId, code });
       if (result.success) {
-        setMessage({ type: "success", text: `Approved sender ${result.senderId}` });
+        toast.success(`Approved sender ${result.senderId}`);
         setManualCode("");
         await fetchRequests();
       } else {
-        setMessage({ type: "error", text: result.error });
+        toast.error(result.error);
       }
     } catch {
-      setMessage({ type: "error", text: "Failed to approve" });
+      toast.error("Failed to approve");
     } finally {
       setApproveLoading(null);
     }
   }
 
   return (
-    <Card>
+    <Card className="glass">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <MessageCircle className="h-4 w-4" />
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-indigo-400/60" />
             Telegram Pairing
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={fetchRequests} disabled={loading}>
+          <Button variant="ghost" size="sm" onClick={fetchRequests} disabled={loading} className="h-8 w-8 rounded-xl hover:bg-white/[0.06]">
             {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className="h-3.5 w-3.5" />
             )}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground/60">
           When someone messages your Telegram bot, they get a pairing code. Approve it here to allow them.
         </p>
 
         {/* Manual code input */}
         <div className="flex gap-2">
-          <Input
-            placeholder="Enter pairing code (e.g. ABCD1234)"
-            value={manualCode}
-            onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-            className="font-mono text-sm"
-            maxLength={8}
-          />
+          <div className="flex-1 input-glow rounded-xl">
+            <Input
+              placeholder="Enter pairing code (e.g. ABCD1234)"
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+              className="font-mono text-sm bg-white/[0.05] border-white/[0.10] rounded-xl"
+              maxLength={8}
+            />
+          </div>
           <Button
             size="sm"
+            className="btn-gradient text-white rounded-xl"
             disabled={!manualCode.trim() || approveLoading !== null}
             onClick={() => handleApprove(manualCode.trim())}
           >
@@ -371,24 +404,25 @@ function TelegramPairingCard({ clawId }: { clawId: Id<"claws"> }) {
         {/* Pending requests */}
         {requests.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Pending requests:</p>
+            <p className="text-[11px] font-medium text-muted-foreground/50 uppercase tracking-wider">Pending requests</p>
             {requests.map((req) => (
               <div
                 key={req.code}
-                className="flex items-center justify-between rounded-md border px-3 py-2"
+                className="flex items-center justify-between rounded-xl border border-white/[0.10] px-3 py-2.5 bg-white/[0.02]"
               >
                 <div className="text-sm">
-                  <span className="font-mono font-bold">{req.code}</span>
-                  <span className="ml-2 text-muted-foreground">
+                  <span className="font-mono font-bold text-indigo-300">{req.code}</span>
+                  <span className="ml-2 text-muted-foreground/60">
                     from {req.id}
                   </span>
-                  <span className="ml-2 text-xs text-muted-foreground">
+                  <span className="ml-2 text-[11px] text-muted-foreground/40">
                     {new Date(req.createdAt).toLocaleTimeString()}
                   </span>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
+                  className="border-white/[0.10] rounded-xl hover:bg-white/[0.06]"
                   disabled={approveLoading !== null}
                   onClick={() => handleApprove(req.code)}
                 >
@@ -403,12 +437,6 @@ function TelegramPairingCard({ clawId }: { clawId: Id<"claws"> }) {
             ))}
           </div>
         )}
-
-        {message && (
-          <p className={`text-xs ${message.type === "success" ? "text-green-600" : "text-destructive"}`}>
-            {message.text}
-          </p>
-        )}
       </CardContent>
     </Card>
   );
@@ -416,18 +444,18 @@ function TelegramPairingCard({ clawId }: { clawId: Id<"claws"> }) {
 
 function LogTypeBadge({ type }: { type: string }) {
   const colors: Record<string, string> = {
-    deploy: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    start: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    stop: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    restart: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-    config_update: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    error: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    health_check: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
+    deploy: "bg-blue-500/10 text-blue-300 border-blue-400/15",
+    start: "bg-emerald-500/10 text-emerald-300 border-emerald-400/15",
+    stop: "bg-yellow-500/10 text-yellow-300 border-yellow-400/15",
+    restart: "bg-orange-500/10 text-orange-300 border-orange-400/15",
+    config_update: "bg-purple-500/10 text-purple-300 border-purple-400/15",
+    error: "bg-red-500/10 text-red-300 border-red-400/15",
+    health_check: "bg-zinc-500/10 text-zinc-400 border-zinc-500/15",
   };
 
   return (
     <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${colors[type] ?? colors.health_check}`}
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${colors[type] ?? colors.health_check}`}
     >
       {type}
     </span>

@@ -10,6 +10,7 @@ export default defineSchema({
     email: v.optional(v.string()),
     image: v.optional(v.string()),
     emailVerificationTime: v.optional(v.number()),
+    role: v.optional(v.union(v.literal("admin"), v.literal("user"))),
   }).index("email", ["email"]),
 
   claws: defineTable({
@@ -30,6 +31,7 @@ export default defineSchema({
     telegramBotToken: v.optional(v.string()),
     configDir: v.string(),
     envVars: v.optional(v.any()),
+    customDomain: v.optional(v.string()),
     createdAt: v.number(),
     lastStartedAt: v.optional(v.number()),
     lastHealthCheck: v.optional(v.number()),
@@ -84,4 +86,68 @@ export default defineSchema({
     clawId: v.id("claws"),
     type: v.union(v.literal("gateway"), v.literal("bridge")),
   }).index("by_port", ["port"]),
+
+  configVersions: defineTable({
+    clawId: v.id("claws"),
+    fileType: v.union(
+      v.literal("soul.md"),
+      v.literal("memory.md"),
+      v.literal("AGENTS.md"),
+    ),
+    content: v.string(),
+    version: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_claw_and_type", ["clawId", "fileType"])
+    .index("by_claw_type_version", ["clawId", "fileType", "version"]),
+
+  notificationChannels: defineTable({
+    userId: v.id("users"),
+    type: v.union(
+      v.literal("discord"),
+      v.literal("slack"),
+      v.literal("email"),
+    ),
+    webhookUrl: v.optional(v.string()),
+    email: v.optional(v.string()),
+    enabled: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  apiKeys: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    keyHash: v.string(),
+    keyPrefix: v.string(),
+    lastUsedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_hash", ["keyHash"]),
+
+  userQuotas: defineTable({
+    userId: v.id("users"),
+    maxClaws: v.number(),
+    maxPorts: v.number(),
+  }).index("by_user", ["userId"]),
+
+  streamTokens: defineTable({
+    tokenHash: v.string(),
+    userId: v.id("users"),
+    clawId: v.id("claws"),
+    expiresAt: v.number(),
+  })
+    .index("by_hash", ["tokenHash"])
+    .index("by_expiry", ["expiresAt"]),
+
+  pendingNotifications: defineTable({
+    channelId: v.id("notificationChannels"),
+    userId: v.id("users"),
+    title: v.string(),
+    message: v.string(),
+    createdAt: v.number(),
+    sent: v.boolean(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_channel", ["channelId"]),
 });

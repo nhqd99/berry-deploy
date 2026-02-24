@@ -8,14 +8,27 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
+import type * as apiKeys from "../apiKeys.js";
+import type * as apiKeysMutations from "../apiKeysMutations.js";
 import type * as auth from "../auth.js";
 import type * as claws from "../claws.js";
+import type * as configVersions from "../configVersions.js";
 import type * as configs from "../configs.js";
 import type * as crons from "../crons.js";
 import type * as docker from "../docker.js";
 import type * as http from "../http.js";
 import type * as logs from "../logs.js";
+import type * as monitoring from "../monitoring.js";
+import type * as notifications from "../notifications.js";
+import type * as proxy from "../proxy.js";
+import type * as proxyMutations from "../proxyMutations.js";
+import type * as quotas from "../quotas.js";
 import type * as skills from "../skills.js";
+import type * as streaming from "../streaming.js";
+import type * as streamingMutations from "../streamingMutations.js";
+import type * as templates from "../templates.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -24,14 +37,27 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
+  apiKeys: typeof apiKeys;
+  apiKeysMutations: typeof apiKeysMutations;
   auth: typeof auth;
   claws: typeof claws;
+  configVersions: typeof configVersions;
   configs: typeof configs;
   crons: typeof crons;
   docker: typeof docker;
   http: typeof http;
   logs: typeof logs;
+  monitoring: typeof monitoring;
+  notifications: typeof notifications;
+  proxy: typeof proxy;
+  proxyMutations: typeof proxyMutations;
+  quotas: typeof quotas;
   skills: typeof skills;
+  streaming: typeof streaming;
+  streamingMutations: typeof streamingMutations;
+  templates: typeof templates;
+  users: typeof users;
 }>;
 
 /**

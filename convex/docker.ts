@@ -261,6 +261,147 @@ export const syncConfig = action({
   },
 });
 
+// --- Skills Sync ---
+
+function resolveOpenClawConfigPath(configDir: string): string {
+  return `${configDir}/config/openclaw.json`;
+}
+
+function readOpenClawConfig(configDir: string): Record<string, unknown> {
+  return readJsonSafe(resolveOpenClawConfigPath(configDir), {});
+}
+
+function writeOpenClawConfig(configDir: string, config: Record<string, unknown>): void {
+  fs.writeFileSync(resolveOpenClawConfigPath(configDir), JSON.stringify(config, null, 2), "utf-8");
+}
+
+function isValidSkillName(name: string): boolean {
+  return /^[a-z0-9][a-z0-9._-]*$/i.test(name) && name.length <= 64;
+}
+
+export const addSkill = action({
+  args: {
+    clawId: v.id("claws"),
+    name: v.string(),
+    description: v.optional(v.string()),
+  },
+  returns: v.id("skills"),
+  handler: async (ctx, args): Promise<Id<"skills">> => {
+    if (!isValidSkillName(args.name)) {
+      throw new Error("Invalid skill name. Use lowercase letters, numbers, hyphens, and dots.");
+    }
+
+    const claw = await ctx.runQuery(api.claws.get, { clawId: args.clawId });
+    if (!claw) throw new Error("Claw not found");
+
+    // Save to DB
+    const skillId = await ctx.runMutation(api.skills.add, {
+      clawId: args.clawId,
+      name: args.name,
+      description: args.description,
+    });
+
+    // Write SKILL.md to workspace/skills/{name}/
+    const skillDir = `${claw.configDir}/workspace/skills/${args.name}`;
+    fs.mkdirSync(skillDir, { recursive: true });
+
+    const description = args.description || `Custom skill: ${args.name}`;
+    const skillMd = `---\nname: ${args.name}\ndescription: ${description}\n---\n\n# ${args.name}\n\n${description}\n`;
+    fs.writeFileSync(`${skillDir}/SKILL.md`, skillMd, "utf-8");
+
+    // Enable in openclaw.json
+    const config = readOpenClawConfig(claw.configDir);
+    if (!config.skills) config.skills = {};
+    const skills = config.skills as Record<string, unknown>;
+    if (!skills.entries) skills.entries = {};
+    const entries = skills.entries as Record<string, unknown>;
+    entries[args.name] = { enabled: true };
+    writeOpenClawConfig(claw.configDir, config);
+
+    await ctx.runMutation(internal.logs.create, {
+      clawId: args.clawId,
+      type: "config_update",
+      message: `Added skill "${args.name}"`,
+    });
+
+    return skillId;
+  },
+});
+
+export const toggleSkill = action({
+  args: {
+    skillId: v.id("skills"),
+    enabled: v.boolean(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    // Update DB first to get skill info
+    await ctx.runMutation(api.skills.toggle, {
+      skillId: args.skillId,
+      enabled: args.enabled,
+    });
+
+    // Re-fetch the skill to get name + clawId
+    const skill = await ctx.runQuery(internal.skills.getById, { skillId: args.skillId });
+    if (!skill) throw new Error("Skill not found");
+
+    const claw = await ctx.runQuery(api.claws.get, { clawId: skill.clawId });
+    if (!claw) throw new Error("Claw not found");
+
+    // Update openclaw.json skills.entries
+    const config = readOpenClawConfig(claw.configDir);
+    if (!config.skills) config.skills = {};
+    const skills = config.skills as Record<string, unknown>;
+    if (!skills.entries) skills.entries = {};
+    const entries = skills.entries as Record<string, unknown>;
+    entries[skill.name] = { enabled: args.enabled };
+    writeOpenClawConfig(claw.configDir, config);
+
+    await ctx.runMutation(internal.logs.create, {
+      clawId: skill.clawId,
+      type: "config_update",
+      message: `${args.enabled ? "Enabled" : "Disabled"} skill "${skill.name}"`,
+    });
+
+    return null;
+  },
+});
+
+export const removeSkill = action({
+  args: { skillId: v.id("skills") },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    // Fetch skill before deleting from DB
+    const skill = await ctx.runQuery(internal.skills.getById, { skillId: args.skillId });
+    if (!skill) throw new Error("Skill not found");
+
+    const claw = await ctx.runQuery(api.claws.get, { clawId: skill.clawId });
+    if (!claw) throw new Error("Claw not found");
+
+    // Delete from DB
+    await ctx.runMutation(api.skills.remove, { skillId: args.skillId });
+
+    // Remove SKILL.md directory from workspace
+    const skillDir = `${claw.configDir}/workspace/skills/${skill.name}`;
+    fs.rmSync(skillDir, { recursive: true, force: true });
+
+    // Remove from openclaw.json skills.entries
+    const config = readOpenClawConfig(claw.configDir);
+    const skills = (config.skills ?? {}) as Record<string, unknown>;
+    const entries = (skills.entries ?? {}) as Record<string, unknown>;
+    delete entries[skill.name];
+    writeOpenClawConfig(claw.configDir, config);
+
+    await ctx.runMutation(internal.logs.create, {
+      clawId: skill.clawId,
+      type: "config_update",
+      message: `Removed skill "${skill.name}"`,
+    });
+
+    return null;
+  },
+});
+
 export const healthCheck = internalAction({
   returns: v.null(),
   handler: async (ctx): Promise<null> => {
@@ -286,6 +427,12 @@ export const healthCheck = internalAction({
             clawId: claw._id,
             type: "error",
             message: `Container stopped unexpectedly (exit code: ${exitCode})`,
+          });
+          // Send crash notification
+          await ctx.runMutation(internal.notifications.sendCrashNotification, {
+            userId: claw.userId,
+            clawName: claw.name,
+            errorMessage: `Container exited with code ${exitCode}`,
           });
         } else {
           await ctx.runMutation(internal.claws.updateStatus, {

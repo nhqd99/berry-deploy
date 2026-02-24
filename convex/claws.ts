@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
 
 export const list = query({
   handler: async (ctx) => {
@@ -44,6 +45,10 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
+
+    // Check quota
+    const canCreate = await ctx.runQuery(internal.quotas.checkQuota, { userId });
+    if (!canCreate) throw new Error("Quota exceeded: maximum number of claws reached");
 
     // Allocate ports atomically within this transaction
     const allocations = await ctx.db.query("portAllocations").collect();
@@ -178,6 +183,15 @@ export const remove = mutation({
       .collect();
     for (const log of logs) {
       await ctx.db.delete(log._id);
+    }
+
+    // Remove config versions
+    const versions = await ctx.db
+      .query("configVersions")
+      .withIndex("by_claw_and_type", (q) => q.eq("clawId", args.clawId))
+      .collect();
+    for (const version of versions) {
+      await ctx.db.delete(version._id);
     }
 
     // Delete the claw record

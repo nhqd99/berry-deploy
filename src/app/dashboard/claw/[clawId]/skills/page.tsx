@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useAction } from "convex/react";
 import { useParams } from "next/navigation";
 import { api } from "@convex/_generated/api";
 import { Id } from "@convex/_generated/dataModel";
@@ -14,17 +14,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function SkillsPage() {
   const params = useParams();
   const clawId = params.clawId as Id<"claws">;
 
+  const claw = useQuery(api.claws.get, { clawId });
   const skills = useQuery(api.skills.list, { clawId });
-  const addSkill = useMutation(api.skills.add);
-  const toggleSkill = useMutation(api.skills.toggle);
-  const removeSkill = useMutation(api.skills.remove);
+  const addSkill = useAction(api.docker.addSkill);
+  const toggleSkill = useAction(api.docker.toggleSkill);
+  const removeSkill = useAction(api.docker.removeSkill);
 
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
@@ -34,64 +38,102 @@ export default function SkillsPage() {
     e.preventDefault();
     if (!newName.trim()) return;
 
-    await addSkill({
-      clawId,
-      name: newName.trim(),
-      description: newDescription.trim() || undefined,
-    });
-    setNewName("");
-    setNewDescription("");
-    setShowAdd(false);
+    try {
+      await addSkill({
+        clawId,
+        name: newName.trim(),
+        description: newDescription.trim() || undefined,
+      });
+      toast.success(`Skill "${newName.trim()}" added`);
+      setNewName("");
+      setNewDescription("");
+      setShowAdd(false);
+    } catch (err) {
+      toast.error("Failed to add skill", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
+
+  async function handleToggle(skillId: Id<"skills">, enabled: boolean, name: string) {
+    try {
+      await toggleSkill({ skillId, enabled });
+      toast.success(`${name} ${enabled ? "enabled" : "disabled"}`);
+    } catch (err) {
+      toast.error("Failed to toggle skill", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
+
+  async function handleRemove(skillId: Id<"skills">, name: string) {
+    try {
+      await removeSkill({ skillId });
+      toast.success(`Skill "${name}" removed`);
+    } catch (err) {
+      toast.error("Failed to remove skill", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href={`/dashboard/claw/${clawId}`}>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold tracking-tight">Skills</h1>
-          <p className="text-muted-foreground">
+      <PageBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: claw?.name ?? "...", href: `/dashboard/claw/${clawId}` },
+          { label: "Skills" },
+        ]}
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gradient">Skills</h1>
+          <p className="text-sm text-muted-foreground/80">
             Manage skills for this Claw instance
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+        <Button size="sm" onClick={() => setShowAdd(!showAdd)} className="btn-gradient text-white rounded-xl">
           <Plus className="mr-2 h-4 w-4" />
           Add Skill
         </Button>
       </div>
 
       {showAdd && (
-        <Card>
+        <Card className="glass">
           <CardHeader>
-            <CardTitle className="text-base">Add New Skill</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Add New Skill</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAdd} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="skill-name">Name</Label>
-                <Input
-                  id="skill-name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g., web-search"
-                  required
-                />
+                <div className="input-glow rounded-xl">
+                  <Input
+                    id="skill-name"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="e.g., web-search"
+                    required
+                    className="bg-white/[0.05] border-white/[0.10] rounded-xl"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="skill-desc">Description (optional)</Label>
-                <Input
-                  id="skill-desc"
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="What does this skill do?"
-                />
+                <div className="input-glow rounded-xl">
+                  <Input
+                    id="skill-desc"
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.target.value)}
+                    placeholder="What does this skill do?"
+                    className="bg-white/[0.05] border-white/[0.10] rounded-xl"
+                  />
+                </div>
               </div>
               <div className="flex gap-2">
-                <Button type="submit" size="sm">
+                <Button type="submit" size="sm" className="btn-gradient text-white rounded-xl">
                   Add
                 </Button>
                 <Button
@@ -99,6 +141,7 @@ export default function SkillsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAdd(false)}
+                  className="border-white/[0.10] hover:bg-white/[0.06] rounded-xl transition-all duration-300"
                 >
                   Cancel
                 </Button>
@@ -108,43 +151,51 @@ export default function SkillsPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="glass">
         <CardHeader>
-          <CardTitle className="text-base">Installed Skills</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Installed Skills</CardTitle>
         </CardHeader>
         <CardContent>
           {skills === undefined ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between rounded-xl border border-white/[0.10] p-3">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-4 w-4 rounded shimmer bg-white/[0.06]" />
+                    <div>
+                      <Skeleton className="h-4 w-24 rounded-lg shimmer bg-white/[0.06]" />
+                      <Skeleton className="mt-1 h-3 w-40 rounded-lg shimmer bg-white/[0.06]" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-8 w-8 rounded-xl shimmer bg-white/[0.06]" />
+                </div>
+              ))}
             </div>
           ) : skills.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground/60">
               No skills installed yet
             </p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {skills.map((skill) => (
                 <div
                   key={skill._id}
-                  className="flex items-center justify-between rounded-md border p-3"
+                  className="flex items-center justify-between rounded-xl border border-white/[0.10] p-3 hover:bg-white/[0.05] transition-all duration-300"
                 >
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() =>
-                        toggleSkill({
-                          skillId: skill._id,
-                          enabled: !skill.enabled,
-                        })
+                        handleToggle(skill._id, !skill.enabled, skill.name)
                       }
-                      className={`h-4 w-4 rounded border transition-colors ${
+                      className={`h-4 w-4 rounded border transition-all duration-200 cursor-pointer ${
                         skill.enabled
-                          ? "bg-primary border-primary"
-                          : "border-input"
+                          ? "bg-indigo-500 border-indigo-500 shadow-sm shadow-indigo-500/30"
+                          : "border-white/[0.2] hover:border-white/[0.4]"
                       }`}
                     >
                       {skill.enabled && (
                         <svg
-                          className="h-4 w-4 text-primary-foreground"
+                          className="h-4 w-4 text-white"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -161,20 +212,28 @@ export default function SkillsPage() {
                     <div>
                       <p className="text-sm font-medium">{skill.name}</p>
                       {skill.description && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground/60">
                           {skill.description}
                         </p>
                       )}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => removeSkill({ skillId: skill._id })}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground/50 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-300"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    }
+                    title={`Remove "${skill.name}"?`}
+                    description="This skill will be permanently removed from this Claw."
+                    confirmLabel="Remove"
+                    variant="destructive"
+                    onConfirm={() => handleRemove(skill._id, skill.name)}
+                  />
                 </div>
               ))}
             </div>
