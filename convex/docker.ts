@@ -27,6 +27,7 @@ export const deployClaw = action({
   args: {
     name: v.string(),
     telegramBotToken: v.optional(v.string()),
+    solobizApiKey: v.optional(v.string()),
     envVars: v.optional(v.any()),
   },
   returns: v.object({
@@ -67,7 +68,7 @@ export const deployClaw = action({
           providers: {
             solobiz: {
               baseUrl: "https://claude-api.solobiz.academy/v1",
-              apiKey: "",
+              apiKey: args.solobizApiKey ?? "",
               auth: "api-key",
               api: "openai-completions",
               models: [

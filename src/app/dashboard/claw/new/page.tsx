@@ -26,6 +26,7 @@ export default function DeployNewClawPage() {
 
   const [name, setName] = useState("");
   const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [solobizApiKey, setSolobizApiKey] = useState("");
   const [envVarsText, setEnvVarsText] = useState("");
   const [deploying, setDeploying] = useState(false);
 
@@ -51,6 +52,7 @@ export default function DeployNewClawPage() {
       const result = await deployClaw({
         name: name.trim(),
         telegramBotToken: telegramBotToken.trim() || undefined,
+        solobizApiKey: solobizApiKey.trim() || undefined,
         envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
       });
 
@@ -102,7 +104,7 @@ export default function DeployNewClawPage() {
         <CardHeader>
           <CardTitle>Configuration</CardTitle>
           <CardDescription>
-            Configure your new OpenClaw instance. Gateway token and ports will be auto-assigned.
+            Configure your new OpenClaw instance
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -121,6 +123,22 @@ export default function DeployNewClawPage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="solobizApiKey">SoloBiz API Key</Label>
+              <Input
+                id="solobizApiKey"
+                type="password"
+                value={solobizApiKey}
+                onChange={(e) => setSolobizApiKey(e.target.value)}
+                placeholder="sk-..."
+                disabled={deploying}
+                className="font-mono bg-white/[0.05] border-white/[0.10] rounded-xl"
+              />
+              <p className="text-xs text-muted-foreground">
+                API key for Claude Sonnet 4.6 via SoloBiz provider. Can be added later in claw settings.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="telegram">Telegram Bot Token</Label>
               <Input
                 id="telegram"
@@ -133,12 +151,6 @@ export default function DeployNewClawPage() {
               />
               <p className="text-xs text-muted-foreground">
                 Get it from <span className="font-medium">@BotFather</span> on Telegram. Leave empty to skip Telegram integration.
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-white/[0.05] border border-white/[0.10] p-3 text-sm">
-              <p className="text-xs text-muted-foreground">
-                Ports and gateway token will be auto-assigned on deploy
               </p>
             </div>
 
