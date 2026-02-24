@@ -64,7 +64,6 @@ export const deployClaw = action({
       // Write default openclaw.json with solobiz provider and claude-sonnet-4.6
       const openclawConfig = {
         models: {
-          default: "solobiz:claude-sonnet-4.6",
           providers: {
             solobiz: {
               baseUrl: "https://claude-api.solobiz.academy/v1",
@@ -349,11 +348,6 @@ export const updateProviderApiKey = action({
 
     const solobiz = providers.solobiz as Record<string, unknown>;
     solobiz.apiKey = args.apiKey;
-
-    // Ensure default model is set
-    if (!models.default) {
-      models.default = "solobiz:claude-sonnet-4.6";
-    }
 
     writeOpenClawConfig(claw.configDir, config);
 
