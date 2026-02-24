@@ -85,6 +85,13 @@ export const deployClaw = action({
             },
           },
         },
+        agents: {
+          defaults: {
+            model: {
+              primary: "solobiz/claude-sonnet-4.6",
+            },
+          },
+        },
       };
       fs.writeFileSync(
         `${configDir}/config/openclaw.json`,
@@ -348,6 +355,17 @@ export const updateProviderApiKey = action({
 
     const solobiz = providers.solobiz as Record<string, unknown>;
     solobiz.apiKey = args.apiKey;
+
+    // Ensure agents.defaults.model.primary is set
+    if (!config.agents) config.agents = {};
+    const agents = config.agents as Record<string, unknown>;
+    if (!agents.defaults) agents.defaults = {};
+    const defaults = agents.defaults as Record<string, unknown>;
+    if (!defaults.model) defaults.model = {};
+    const model = defaults.model as Record<string, unknown>;
+    if (!model.primary) {
+      model.primary = "solobiz/claude-sonnet-4.6";
+    }
 
     writeOpenClawConfig(claw.configDir, config);
 

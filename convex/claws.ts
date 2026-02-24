@@ -230,6 +230,6 @@ function getDefaultContent(fileType: "soul.md" | "memory.md" | "AGENTS.md"): str
     case "memory.md":
       return "# Memory\n\n(No memories yet)\n";
     case "AGENTS.md":
-      return "---\nmodel: solobiz:claude-sonnet-4.6\n---\n\n# Agents\n\n(Default configuration)\n";
+      return "# Agents\n\n(Default configuration)\n";
   }
 }
