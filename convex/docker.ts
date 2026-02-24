@@ -61,6 +61,38 @@ export const deployClaw = action({
         fs.writeFileSync(`${configDir}/config/${config.fileType}`, config.content, "utf-8");
       }
 
+      // Write default openclaw.json with solobiz provider and claude-sonnet-4.6
+      const openclawConfig = {
+        models: {
+          default: "solobiz:claude-sonnet-4.6",
+          providers: {
+            solobiz: {
+              baseUrl: "https://claude-api.solobiz.academy/v1",
+              apiKey: "",
+              auth: "api-key",
+              api: "openai-completions",
+              models: [
+                {
+                  id: "claude-sonnet-4.6",
+                  name: "Claude Sonnet 4.6",
+                  api: "openai-completions",
+                  reasoning: false,
+                  input: ["text", "image"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 200000,
+                  maxTokens: 16384,
+                },
+              ],
+            },
+          },
+        },
+      };
+      fs.writeFileSync(
+        `${configDir}/config/openclaw.json`,
+        JSON.stringify(openclawConfig, null, 2),
+        "utf-8",
+      );
+
       const envFlags = [
         `-e HOME=/home/node`,
         `-e TERM=xterm-256color`,
@@ -274,6 +306,92 @@ function readOpenClawConfig(configDir: string): Record<string, unknown> {
 function writeOpenClawConfig(configDir: string, config: Record<string, unknown>): void {
   fs.writeFileSync(resolveOpenClawConfigPath(configDir), JSON.stringify(config, null, 2), "utf-8");
 }
+
+// --- Provider API Key ---
+
+export const updateProviderApiKey = action({
+  args: {
+    clawId: v.id("claws"),
+    apiKey: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    const claw = await ctx.runQuery(api.claws.get, { clawId: args.clawId });
+    if (!claw) throw new Error("Claw not found");
+
+    const config = readOpenClawConfig(claw.configDir);
+
+    // Ensure models.providers.solobiz exists
+    if (!config.models) config.models = {};
+    const models = config.models as Record<string, unknown>;
+    if (!models.providers) models.providers = {};
+    const providers = models.providers as Record<string, unknown>;
+    if (!providers.solobiz) {
+      providers.solobiz = {
+        baseUrl: "https://claude-api.solobiz.academy/v1",
+        apiKey: "",
+        auth: "api-key",
+        api: "openai-completions",
+        models: [
+          {
+            id: "claude-sonnet-4.6",
+            name: "Claude Sonnet 4.6",
+            api: "openai-completions",
+            reasoning: false,
+            input: ["text", "image"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 200000,
+            maxTokens: 16384,
+          },
+        ],
+      };
+    }
+
+    const solobiz = providers.solobiz as Record<string, unknown>;
+    solobiz.apiKey = args.apiKey;
+
+    // Ensure default model is set
+    if (!models.default) {
+      models.default = "solobiz:claude-sonnet-4.6";
+    }
+
+    writeOpenClawConfig(claw.configDir, config);
+
+    // Restart container to pick up new API key
+    if (claw.containerId && claw.status === "running") {
+      dockerExec(`restart -t 5 ${claw.containerId}`);
+      await ctx.runMutation(internal.logs.create, {
+        clawId: args.clawId,
+        type: "restart",
+        message: "Restarted after updating provider API key",
+      });
+    }
+
+    await ctx.runMutation(internal.logs.create, {
+      clawId: args.clawId,
+      type: "config_update",
+      message: "Updated solobiz provider API key",
+    });
+
+    return null;
+  },
+});
+
+export const getProviderApiKey = action({
+  args: { clawId: v.id("claws") },
+  returns: v.string(),
+  handler: async (ctx, args): Promise<string> => {
+    const claw = await ctx.runQuery(api.claws.get, { clawId: args.clawId });
+    if (!claw) throw new Error("Claw not found");
+
+    const config = readOpenClawConfig(claw.configDir);
+    const models = (config.models ?? {}) as Record<string, unknown>;
+    const providers = (models.providers ?? {}) as Record<string, unknown>;
+    const solobiz = (providers.solobiz ?? {}) as Record<string, unknown>;
+
+    return typeof solobiz.apiKey === "string" ? solobiz.apiKey : "";
+  },
+});
 
 function isValidSkillName(name: string): boolean {
   return /^[a-z0-9][a-z0-9._-]*$/i.test(name) && name.length <= 64;

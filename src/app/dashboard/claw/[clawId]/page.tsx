@@ -37,8 +37,10 @@ import {
   Activity,
   TerminalSquare,
   ChevronRight,
+  Key,
+  Save,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { formatUptime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -282,6 +284,9 @@ export default function ClawDetailPage() {
         <TelegramPairingCard clawId={clawId} />
       )}
 
+      {/* Provider API Key */}
+      <ProviderApiKeyCard clawId={clawId} />
+
       {/* Recent Activity */}
       <Card className="glass">
         <CardHeader>
@@ -312,6 +317,98 @@ export default function ClawDetailPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ProviderApiKeyCard({ clawId }: { clawId: Id<"claws"> }) {
+  const getApiKey = useAction(api.docker.getProviderApiKey);
+  const updateApiKey = useAction(api.docker.updateProviderApiKey);
+
+  const [apiKey, setApiKey] = useState("");
+  const [savedKey, setSavedKey] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getApiKey({ clawId })
+      .then((key) => {
+        if (cancelled) return;
+        setApiKey(key);
+        setSavedKey(key);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [clawId, getApiKey]);
+
+  const isDirty = apiKey !== savedKey;
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await updateApiKey({ clawId, apiKey: apiKey.trim() });
+      setSavedKey(apiKey.trim());
+      setApiKey(apiKey.trim());
+      toast.success("API key saved & Claw restarted");
+    } catch (err) {
+      toast.error("Failed to save API key", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="glass">
+      <CardHeader>
+        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <Key className="h-4 w-4 text-indigo-400/60" />
+          Provider API Key
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground/60">
+          Solobiz provider (Claude Sonnet 4.6). Saving will restart the Claw.
+        </p>
+        {loading ? (
+          <div className="h-9 rounded-xl bg-white/[0.06] animate-pulse" />
+        ) : (
+          <div className="flex gap-2">
+            <div className="flex-1 input-glow rounded-xl">
+              <Input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-..."
+                className="font-mono text-sm bg-white/[0.05] border-white/[0.10] rounded-xl"
+              />
+            </div>
+            <Button
+              size="sm"
+              className="btn-gradient text-white rounded-xl"
+              disabled={!isDirty || saving}
+              onClick={handleSave}
+            >
+              {saving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              Save
+            </Button>
+          </div>
+        )}
+        {isDirty && !loading && (
+          <p className="text-xs text-amber-400/80">
+            Unsaved changes — saving will restart the Claw
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
