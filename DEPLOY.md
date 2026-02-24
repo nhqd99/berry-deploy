@@ -2,6 +2,91 @@
 
 Deploy Berry Claw on a VPS with Cloudflare Tunnel for custom domain + HTTPS.
 
+---
+
+## Quick Start (Auto Deploy Script)
+
+SSH vao VPS roi chay:
+
+```bash
+# 1. Clone repo
+git clone git@github.com:nhqd99/berry-deploy.git /opt/berry-claw
+cd /opt/berry-claw
+
+# 2. Chay script auto deploy
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Script se hoi:
+- **Git repo URL**: `git@github.com:nhqd99/berry-deploy.git`
+- **Domain**: domain cua ban (vd: `claw.example.com`)
+- **Cloudflare Tunnel token**: lay tu Cloudflare Dashboard (hoac Enter de setup sau)
+- **OpenClaw image**: chon 1 trong 3 option (pull/build/skip)
+
+### Lay Cloudflare Tunnel Token
+
+1. Dang nhap [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com)
+2. Vao **Networks** > **Tunnels** > **Create a tunnel**
+3. Chon **Cloudflared** connector
+4. Copy token (chuoi dai bat dau `eyJ...`)
+5. Sau khi script chay xong, quay lai Dashboard:
+   - Tab **Public Hostname** > **Add a public hostname**
+   - Subdomain: `claw` (hoac ten ban muon)
+   - Domain: chon domain cua ban
+   - Service Type: `HTTP`
+   - URL: `localhost:3002`
+   - Save
+
+### Script lam gi?
+
+| Buoc | Mo ta |
+|------|-------|
+| 1 | Cai Docker, Node.js 20, cloudflared |
+| 2 | Clone repo & `npm install` |
+| 3 | Pull/build OpenClaw Docker image |
+| 4 | Tao `.env.local` + thu muc data |
+| 5 | Generate JWT keys cho Convex Auth |
+| 6 | `npm run build` Next.js |
+| 7 | Tao 2 systemd services + start |
+| 8 | Setup Cloudflare Tunnel + UFW firewall |
+
+### Kiem tra sau khi deploy
+
+```bash
+# Kiem tra services
+sudo systemctl status berry-claw-convex berry-claw-web cloudflared
+
+# Xem logs
+journalctl -u berry-claw-convex -f   # Convex backend
+journalctl -u berry-claw-web -f      # Next.js
+journalctl -u cloudflared -f         # Tunnel
+
+# Test local
+curl http://localhost:3002
+
+# Test qua domain
+curl https://claw.example.com
+```
+
+### Cap nhat Berry Claw
+
+```bash
+cd /opt/berry-claw
+git pull origin main
+npm install
+npm run build
+sudo systemctl restart berry-claw-convex berry-claw-web
+```
+
+---
+
+## Manual Deployment (Step-by-Step)
+
+Neu muon deploy thu cong tung buoc, doc tiep ben duoi.
+
+---
+
 ## Architecture Overview
 
 ```
