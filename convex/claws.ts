@@ -3,6 +3,9 @@ import { query, mutation, internalMutation, internalQuery } from "./_generated/s
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 
+const PORT_RANGE_START = parseInt(process.env.PORT_RANGE_START || "20000", 10);
+const PORT_RANGE_END = parseInt(process.env.PORT_RANGE_END || "29999", 10);
+
 export const list = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
@@ -53,8 +56,8 @@ export const create = mutation({
     // Allocate ports atomically within this transaction
     const allocations = await ctx.db.query("portAllocations").collect();
     const usedPorts = new Set(allocations.map((a) => a.port));
-    const rangeStart = 20000;
-    const rangeEnd = 29999;
+    const rangeStart = PORT_RANGE_START;
+    const rangeEnd = PORT_RANGE_END;
     let gatewayPort = 0;
     let bridgePort = 0;
     for (let port = rangeStart; port <= rangeEnd; port += 2) {

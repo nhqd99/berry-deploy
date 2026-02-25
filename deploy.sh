@@ -227,6 +227,7 @@ cat > "$INSTALL_DIR/.env.local" << EOF
 # Convex (local anonymous mode)
 NEXT_PUBLIC_CONVEX_URL=http://127.0.0.1:3214
 NEXT_PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3215
+CONVEX_SITE_URL=http://127.0.0.1:3215
 CONVEX_DEPLOYMENT=anonymous:anonymous-berry-claw
 
 # Docker / OpenClaw
