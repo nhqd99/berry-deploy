@@ -101,7 +101,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isAdmin = useQuery(api.admin.isAdmin);
+  const isAdmin = useQuery(isAuthenticated ? api.admin.isAdmin : "skip");
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

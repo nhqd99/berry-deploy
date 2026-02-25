@@ -363,6 +363,14 @@ npx convex env set JWKS -- "$(cat "$JWKS_FILE")" 2>/dev/null || warn "Failed to 
 rm -f "$JWT_PRIVATE_KEY_FILE" "$JWKS_FILE"
 log "JWT keys set"
 
+# Deploy Convex functions and schema to the backend
+log "Deploying Convex functions..."
+npx convex deploy --cmd 'npm run build' || {
+  warn "npx convex deploy failed, trying npx convex push..."
+  npx convex push || warn "Failed to push Convex functions. Run manually: npx convex deploy"
+}
+log "Convex functions deployed"
+
 # Start Next.js
 log "Starting Next.js web server..."
 sudo systemctl enable --now berry-claw-web
