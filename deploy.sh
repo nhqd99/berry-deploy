@@ -64,11 +64,12 @@ header "Berry Claw — Auto Deploy"
 
 echo -e "${BOLD}This script will:${NC}"
 echo "  1. Install Docker, Node.js 20, cloudflared"
-echo "  2. Clone & build Berry Claw"
-echo "  3. Generate JWT keys for Convex Auth"
-echo "  4. Create systemd services (convex + next.js)"
-echo "  5. Configure Cloudflare Tunnel"
-echo "  6. Enable UFW firewall"
+echo "  2. Clone Berry Claw & install dependencies"
+echo "  3. Prepare OpenClaw Docker image"
+echo "  4. Configure environment & generate JWT keys"
+echo "  5. Create systemd services & start Convex backend"
+echo "  6. Deploy Convex functions & build Next.js"
+echo "  7. Configure Cloudflare Tunnel & firewall"
 echo ""
 
 # ─── Interactive prompts ──────────────────────────────────────────────────────
@@ -138,7 +139,7 @@ if [[ "${CONFIRM,,}" != "y" ]]; then
 fi
 
 # ─── Step 1: System packages ─────────────────────────────────────────────────
-header "Step 1/8 — Installing system dependencies"
+header "Step 1/7 — Installing system dependencies"
 
 sudo apt update
 sudo apt install -y curl git openssl ufw lsb-release ca-certificates gnupg
@@ -174,7 +175,7 @@ else
 fi
 
 # ─── Step 2: Clone & Install ─────────────────────────────────────────────────
-header "Step 2/8 — Cloning Berry Claw"
+header "Step 2/7 — Cloning Berry Claw"
 
 if [[ -d "$INSTALL_DIR" ]]; then
   warn "$INSTALL_DIR already exists. Pulling latest changes..."
@@ -191,7 +192,7 @@ log "Installing npm dependencies..."
 npm install
 
 # ─── Step 3: OpenClaw Docker Image ───────────────────────────────────────────
-header "Step 3/8 — Preparing OpenClaw Docker image"
+header "Step 3/7 — Preparing OpenClaw Docker image"
 
 case "$OPENCLAW_CHOICE" in
   1)
@@ -217,8 +218,8 @@ case "$OPENCLAW_CHOICE" in
     ;;
 esac
 
-# ─── Step 4: Data directories & .env.local ────────────────────────────────────
-header "Step 4/8 — Configuring environment"
+# ─── Step 4: Data directories, .env.local & JWT keys ─────────────────────────
+header "Step 4/7 — Configuring environment & JWT keys"
 
 sudo mkdir -p "$CLAW_DATA_DIR"
 sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR"
@@ -242,8 +243,7 @@ EOF
 
 log "Created $INSTALL_DIR/.env.local"
 
-# ─── Step 5: JWT Keys for Convex Auth ─────────────────────────────────────────
-header "Step 5/8 — Generating JWT keys for Convex Auth"
+log "Generating JWT keys for Convex Auth..."
 
 JWT_PEM=$(mktemp)
 openssl genpkey -algorithm RSA -out "$JWT_PEM" -pkeyopt rsa_keygen_bits:2048 2>/dev/null
@@ -271,15 +271,8 @@ echo "$JWKS" > "$JWKS_FILE"
 
 log "JWT keys generated (will be set after Convex starts)"
 
-# ─── Step 6: Build Next.js ────────────────────────────────────────────────────
-header "Step 6/8 — Building Next.js for production"
-
-cd "$INSTALL_DIR"
-npm run build
-log "Next.js build complete"
-
-# ─── Step 7: systemd services ────────────────────────────────────────────────
-header "Step 7/8 — Creating systemd services"
+# ─── Step 5: systemd services & start Convex ─────────────────────────────────
+header "Step 5/7 — Creating systemd services & starting Convex"
 
 NPX_PATH=$(which npx)
 NPM_PATH=$(which npm)
@@ -357,19 +350,38 @@ fi
 # Set JWT keys in Convex
 log "Setting JWT keys in Convex..."
 cd "$INSTALL_DIR"
-npx convex env set JWT_PRIVATE_KEY -- "$(cat "$JWT_PRIVATE_KEY_FILE")" 2>/dev/null || warn "Failed to set JWT_PRIVATE_KEY (you may need to set it manually)"
-npx convex env set JWKS -- "$(cat "$JWKS_FILE")" 2>/dev/null || warn "Failed to set JWKS (you may need to set it manually)"
+npx convex env set JWT_PRIVATE_KEY -- "$(cat "$JWT_PRIVATE_KEY_FILE")" || {
+  err "Failed to set JWT_PRIVATE_KEY. Convex backend may not be running."
+  err "Check: sudo journalctl -u berry-claw-convex -n 20"
+  exit 1
+}
+npx convex env set JWKS -- "$(cat "$JWKS_FILE")" || {
+  err "Failed to set JWKS."
+  exit 1
+}
 
 rm -f "$JWT_PRIVATE_KEY_FILE" "$JWKS_FILE"
 log "JWT keys set"
 
-# Deploy Convex functions and schema to the backend
-log "Deploying Convex functions..."
-npx convex deploy --cmd 'npm run build' || {
-  warn "npx convex deploy failed, trying npx convex push..."
-  npx convex push || warn "Failed to push Convex functions. Run manually: npx convex deploy"
+# ─── Step 6: Deploy Convex functions & build Next.js ─────────────────────────
+header "Step 6/7 — Deploying Convex functions & building Next.js"
+
+# Deploy Convex functions and schema (this also generates _generated/ files)
+log "Pushing Convex functions and schema..."
+npx convex deploy || {
+  err "Failed to deploy Convex functions."
+  err "Check: sudo journalctl -u berry-claw-convex -n 20"
+  exit 1
 }
 log "Convex functions deployed"
+
+# Now build Next.js (requires _generated/ from convex deploy)
+log "Building Next.js app..."
+npm run build || {
+  err "Next.js build failed."
+  exit 1
+}
+log "Next.js build complete"
 
 # Start Next.js
 log "Starting Next.js web server..."
@@ -391,8 +403,8 @@ else
   journalctl -u berry-claw-web -n 10 --no-pager
 fi
 
-# ─── Step 8: Cloudflare Tunnel ────────────────────────────────────────────────
-header "Step 8/8 — Configuring Cloudflare Tunnel"
+# ─── Step 7: Cloudflare Tunnel & Firewall ────────────────────────────────────
+header "Step 7/7 — Cloudflare Tunnel & Firewall"
 
 if [[ -n "$CF_TUNNEL_TOKEN" ]]; then
   log "Installing Cloudflare Tunnel as service with provided token..."
@@ -447,9 +459,7 @@ else
   echo ""
 fi
 
-# ─── Firewall ─────────────────────────────────────────────────────────────────
-header "Firewall"
-
+# Firewall
 log "Configuring UFW..."
 sudo ufw default deny incoming 2>/dev/null || true
 sudo ufw default allow outgoing 2>/dev/null || true
@@ -482,7 +492,8 @@ fi
 
 echo ""
 echo "  Update:"
-echo "    cd ${INSTALL_DIR} && git pull && npm install && npm run build"
+echo "    cd ${INSTALL_DIR} && git pull && npm install"
+echo "    npx convex deploy && npm run build"
 echo "    sudo systemctl restart berry-claw-convex berry-claw-web"
 echo ""
 echo -e "${YELLOW}Remember:${NC} If this is a fresh Docker install, log out and back in"
