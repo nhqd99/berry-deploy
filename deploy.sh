@@ -224,7 +224,7 @@ header "Step 4/7 — Configuring environment & JWT keys"
 sudo mkdir -p "$CLAW_DATA_DIR"
 sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR"
 
-cat > "$INSTALL_DIR/.env.local" << EOF
+sudo tee "$INSTALL_DIR/.env.local" > /dev/null << EOF
 # Convex (local anonymous mode)
 NEXT_PUBLIC_CONVEX_URL=http://127.0.0.1:3214
 NEXT_PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3215
@@ -240,6 +240,7 @@ CADDYFILE_PATH=${DATA_DIR}/Caddyfile
 PORT_RANGE_START=20000
 PORT_RANGE_END=29999
 EOF
+sudo chown "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR/.env.local"
 
 log "Created $INSTALL_DIR/.env.local"
 
