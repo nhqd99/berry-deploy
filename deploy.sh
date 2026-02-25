@@ -232,6 +232,7 @@ CONVEX_DEPLOYMENT=anonymous:anonymous-berry-claw
 # Docker / OpenClaw
 OPENCLAW_IMAGE=${OPENCLAW_IMAGE_NAME}
 OPENCLAW_DATA_DIR=${CLAW_DATA_DIR}
+CADDYFILE_PATH=${DATA_DIR}/Caddyfile
 
 # Port range for Claw instances
 PORT_RANGE_START=20000
@@ -294,6 +295,7 @@ Requires=docker.service
 Type=simple
 User=${SERVICE_USER}
 WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${INSTALL_DIR}/.env.local
 Environment=NODE_ENV=production
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=${NPX_PATH} convex backend --port 3214 --site-port 3215
@@ -317,6 +319,7 @@ Requires=berry-claw-convex.service
 Type=simple
 User=${SERVICE_USER}
 WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${INSTALL_DIR}/.env.local
 Environment=NODE_ENV=production
 Environment=PORT=3002
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
